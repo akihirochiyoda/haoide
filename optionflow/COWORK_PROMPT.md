@@ -104,7 +104,9 @@ Unusual Options Flow を毎日分析できる状態をローカルに用意す�
        git commit -m "infolib flow report $(date -u +%Y-%m-%d)"
        git push
 
-完了したら、まとめ表と監修コメントをこの画面に表示してください。
+6. Google ドライブへ断面を保存（このプロンプト集の「⑤」の手順を実行）。
+
+完了したら、まとめ表・監修コメント・ドライブの保存リンクをこの画面に表示してください。
 ```
 
 ---
@@ -201,9 +203,55 @@ data/infolib_flow.json を作り直し、再実行する。
     git add reports/ data/infolib_flow.json
     git commit -m "infolib flow report (corrected data) $(date -u +%Y-%m-%d)"
     git push
+- Google ドライブへ断面を保存（このプロンプト集の「⑤」の手順を実行）。
 
-完了したら、検算(a)〜(d)の結果・まとめ表・総括コメントをこの画面に表示してください。
+完了したら、検算(a)〜(d)の結果・まとめ表・総括コメント・ドライブ保存リンクを表示してください。
 ```
+
+---
+
+## ⑤ Google ドライブへ断面ごとに保存（毎回のアップロード）
+
+`python -m optionflow.run` は実行のたびに `reports/` に **タイムスタンプ命名**の
+ファイル群を生成します（1実行＝1断面、上書きしない）:
+
+- `optionflow_<run_id>.md`          … レポート本文（→ Google ドキュメント）
+- `optionflow_<run_id>.summary.csv` … まとめ表  （→ Google スプレッドシート）
+- `optionflow_<run_id>.trades.csv`  … 大口取引明細（→ Google スプレッドシート）
+- `optionflow_<run_id>.json`        … 構造化データ
+- `run_id` 例: `2026-06-22_123018Z`（UTC・秒まで）
+
+これらを、ドライブ操作できるコワークが**専用フォルダ**へアップロードします。
+分析実行プロンプト（②/④）の最後に、次の手順を続けて実行してください。
+
+```text
+# Google ドライブへ断面を保存する
+1. 専用フォルダを用意（初回のみ作成、以降は再利用）:
+   - タイトル "OptionFlow Reports - ツンデレ姫オプション分析" のフォルダを検索。
+   - 無ければ mimeType=application/vnd.google-apps.folder で作成し、フォルダIDを控える。
+2. 今回の run_id（実行ログ "レポート保存 (run_id=...)" の値）に対応する reports/ の
+   4ファイルを、そのフォルダ配下にアップロード:
+   - optionflow_<run_id>.md
+       → contentMimeType=text/plain でアップロード（Google ドキュメントに自動変換）
+         タイトル: "OptionFlow <run_id> レポート"
+   - optionflow_<run_id>.summary.csv
+       → contentMimeType=text/csv でアップロード（Google スプレッドシートに自動変換）
+         タイトル: "OptionFlow <run_id> まとめ"
+   - optionflow_<run_id>.trades.csv
+       → contentMimeType=text/csv でアップロード（スプレッドシートに自動変換）
+         タイトル: "OptionFlow <run_id> 明細"
+   - optionflow_<run_id>.json
+       → contentMimeType=application/json でアップロード（変換しない）
+         タイトル: "OptionFlow <run_id> data.json"
+   いずれも parentId に専用フォルダのIDを指定する。
+3. アップロードした各ファイルの共有リンク（URL）をこの画面に一覧表示して報告する。
+   フォルダのリンクも併記する。
+```
+
+ポイント:
+- 毎回 run_id が変わるため、断面ごとに別ファイルとしてドライブに残ります（履歴になる）。
+- ドキュメント＝読み物（レポート）、スプレッドシート＝集計（まとめ＋明細）の使い分け。
+- 同じ run_id で再アップロードしないこと（重複防止）。
 
 ---
 
