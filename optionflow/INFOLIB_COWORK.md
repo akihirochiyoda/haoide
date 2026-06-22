@@ -25,6 +25,32 @@ InfoLib は公式APIが無いため、**ブラウザ操作できる Claude セ�
 
 ---
 
+## ブラウザ操作の2つの方法（ローカル）
+
+InfoLib のページは JavaScript 描画なので、ローカルで以下のどちらかを使います。
+
+### 方法A: ブラウザMCP で Claude 自身に読み取らせる（推奨）
+
+ローカルの Claude Code に **ブラウザMCP**（例: Playwright MCP / Chrome DevTools MCP）を
+追加すると、Claude がページを開いて表を読み取り、JSON を保存できます。
+HTML構造が変わってもセレクタ保守が不要なのが利点。下のステップ1の依頼文をそのまま渡すだけ。
+
+### 方法B: Playwright 取得スクリプトで「データ取得口」を特定
+
+```bash
+pip install playwright && playwright install chromium
+python -m optionflow.tools.fetch_infolib            # ヘッドレス
+python -m optionflow.tools.fetch_infolib --headed   # 画面を見ながら
+```
+
+このスクリプトはページが内部で叩く **XHR/fetch の JSON レスポンスを丸ごと捕捉**し
+`data/infolib_capture/responses/` に保存します（＋スクショ＋HTML）。
+この中から本物のフローJSONを特定できれば、以降は安定して取り込めます。
+特定したJSONは Claude に「`data/infolib_flow.json` のスキーマに変換して」と
+依頼すれば変換できます。
+
+---
+
 ## ステップ1: ブラウザでフローを取得（Claude コワークに渡す依頼文）
 
 ブラウザ操作できる Claude セッションに、以下をそのまま依頼してください:

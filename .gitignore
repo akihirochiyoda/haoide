@@ -35,3 +35,4 @@ nosetests.xml
 
 # optionflow: ライブ取得データ(サンプルは残す)
 data/infolib_flow.json
+data/infolib_capture/
