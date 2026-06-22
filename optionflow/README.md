@@ -45,7 +45,7 @@ optionflow/
 |---|---|---|---|
 | `yfinance` | 無料・既定 | チェーン推定 | キー不要で即動作 |
 | `unusual_whales` | 有料・公式API | 本物のフロー | `UNUSUAL_WHALES_API_KEY` で自動切替 |
-| `infolib` | 無料・ブラウザ取得 | 本物のフロー | InfoLib を Claude コワークが読み取り（[INFOLIB_COWORK.md](INFOLIB_COWORK.md)） |
+| `infolib` | 無料・ブラウザ取得 | 本物のフロー | InfoLib を Claude コワークが読み取り（[INFOLIB_COWORK.md](INFOLIB_COWORK.md) / 貼り付け用プロンプト [COWORK_PROMPT.md](COWORK_PROMPT.md)） |
 
 `auto` は `UNUSUAL_WHALES_API_KEY` があれば Unusual Whales、無ければ yfinance を選びます。
 InfoLib を使う場合は `--provider infolib` を明示します。
