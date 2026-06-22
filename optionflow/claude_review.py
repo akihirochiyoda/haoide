@@ -39,6 +39,8 @@ def _build_user_payload(daily: DailyAnalysis) -> str:
     summary = {
         "generated_at": daily.generated_at,
         "data_method": "real_flow" if daily.flow_based else "chain_heuristic",
+        "amount_basis": "notional" if daily.premium_basis_notional else "premium",
+        "expired_trades_excluded": daily.total_expired_skipped,
         "ranked_directional": [
             {
                 "ticker": t.ticker,
@@ -122,12 +124,18 @@ def _fallback(daily: DailyAnalysis, reason: str) -> str:
         if bears:
             lines.append(f"- 📉 下落期待: {', '.join(bears)}")
         top = ranked[0]
+        basis = "想定元本" if top.premium_basis_notional else "プレミアム"
         lines.append(
-            f"- 最も方向性が明確なのは **{top.ticker}**（{top.classification}、確信度 {top.conviction_usd:,.0f} 相当）。"
+            f"- 最も規模が大きいのは **{top.ticker}**（{top.classification}、規模 {top.conviction_usd:,.0f} {basis}基準）。"
+            "規模が大きい＝確度が高い、ではない点に注意。"
         )
     if not daily.flow_based:
         lines.append(
             "- ⚠️ 本日はチェーン推定方式。約定の買い/売りを区別できないため方向性は推定であり、過信は禁物。"
+        )
+    if daily.premium_basis_notional:
+        lines.append(
+            "- ⚠️ オプション価格未取得のため金額は行使額(想定元本)で代用。実際の投下額ではなく規模の目安。"
         )
     lines.append("- 本コメントは情報提供であり投資助言ではありません。")
     return "\n".join(lines)

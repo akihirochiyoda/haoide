@@ -30,10 +30,37 @@ class OptionContract:
 
     @property
     def estimated_premium_usd(self) -> float:
-        """想定プレミアム(ドル)。1契約=100株。"""
+        """想定金額(ドル)。1契約=100株。
+
+        優先順:
+          1) 直接与えられた premium_usd
+          2) 1株あたり価格 × 出来高 × 100 (= 実プレミアム)
+          3) 価格情報が無い場合のみ、行使額(notional)= 行使価格 × 出来高 × 100
+        3) は実際に支払われたプレミアムではない点に注意(premium_is_notional 参照)。
+        """
         if self.premium_usd is not None:
-            return self.premium_usd
-        return float(self.volume) * float(self.last_price) * 100.0
+            return float(self.premium_usd)
+        if self.last_price > 0:
+            return float(self.volume) * float(self.last_price) * 100.0
+        # 価格情報なし: 行使額(notional)で代替(実プレミアムではない)
+        return float(self.volume) * float(self.strike) * 100.0
+
+    @property
+    def premium_is_notional(self) -> bool:
+        """estimated_premium_usd が実プレミアムではなく行使額(notional)か。
+
+        - 1株あたり価格があれば実プレミアム → False
+        - 価格もプレミアムも無ければ notional フォールバック → True
+        - premium が与えられていても、1株単価が行使価格にほぼ等しい場合は
+          行使額(strike×size×100)を誤って premium 欄に入れた可能性が高く True とみなす
+        """
+        if self.last_price > 0:
+            return False
+        if self.premium_usd is None:
+            return True
+        denom = max(float(self.volume) * 100.0, 1.0)
+        per_share = float(self.premium_usd) / denom
+        return self.strike > 0 and abs(per_share - self.strike) / self.strike < 0.02
 
     @property
     def vol_oi_ratio(self) -> float:

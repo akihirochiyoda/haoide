@@ -73,6 +73,7 @@ def main(argv=None) -> int:
         provider_name=provider.name,
         flow_based=provider.provides_flow_side,
         generated_at=generated_at,
+        as_of=now.date(),
     )
 
     # クロード監修

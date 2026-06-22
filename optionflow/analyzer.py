@@ -12,10 +12,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from typing import Optional
 
 from .config import Thresholds
 from .providers.base import OptionContract, TickerSnapshot
+
+
+def _parse_iso_date(s: str) -> Optional[date]:
+    """'YYYY-MM-DD' を date に。失敗時 None。"""
+    try:
+        parts = str(s).split("-")
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except (ValueError, IndexError, TypeError):
+        return None
 
 
 @dataclass
@@ -37,6 +47,8 @@ class NotableTrade:
     # ステップ4: この取引が示す方向("bullish"/"bearish")
     direction: str
     directional_premium_usd: float
+    # premium_usd が実プレミアムでなく行使額(notional)か
+    premium_is_notional: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -53,10 +65,16 @@ class TickerAnalysis:
     put_call_ratio: float = 0.0
     bullish_score_usd: float = 0.0  # 正=強気 / 負=弱気
     classification: str = "中立"  # "上昇期待" / "下落期待" / "中立"
-    conviction_usd: float = 0.0  # 方向性の確信度(スコア絶対値)
+    conviction_usd: float = 0.0  # 方向性スコアの絶対値(=規模)
     notable_trades: list[NotableTrade] = field(default_factory=list)
     itm_call_strikes: list[float] = field(default_factory=list)
     itm_put_strikes: list[float] = field(default_factory=list)
+    # この銘柄の金額が実プレミアムでなく行使額(notional)ベースか
+    premium_basis_notional: bool = False
+    # 原資産価格が無く ITM/OTM 判定ができなかったか
+    moneyness_unknown: bool = False
+    # 期限切れのため除外した約定数
+    expired_skipped: int = 0
     error: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -75,9 +93,18 @@ class DailyAnalysis:
     tickers: list[TickerAnalysis] = field(default_factory=list)
 
     def ranked(self) -> list[TickerAnalysis]:
-        """方向性が見えた順(確信度の高い順)に並べる。"""
+        """方向性が見えた順(規模の大きい順)に並べる。"""
         clear = [t for t in self.tickers if t.classification != "中立" and not t.error]
         return sorted(clear, key=lambda t: t.conviction_usd, reverse=True)
+
+    @property
+    def premium_basis_notional(self) -> bool:
+        """1銘柄でも金額が行使額(notional)ベースなら True(レポートの表記切替に使用)。"""
+        return any(t.premium_basis_notional for t in self.tickers)
+
+    @property
+    def total_expired_skipped(self) -> int:
+        return sum(t.expired_skipped for t in self.tickers)
 
     def to_dict(self) -> dict:
         return {
@@ -115,7 +142,10 @@ def _direction_of(contract: OptionContract, flow_based: bool) -> tuple[str, floa
 
 
 def analyze_ticker(
-    snapshot: TickerSnapshot, thresholds: Thresholds, flow_based: bool
+    snapshot: TickerSnapshot,
+    thresholds: Thresholds,
+    flow_based: bool,
+    as_of: Optional[date] = None,
 ) -> TickerAnalysis:
     analysis = TickerAnalysis(
         ticker=snapshot.ticker,
@@ -126,12 +156,20 @@ def analyze_ticker(
         return analysis
 
     spot = snapshot.underlying_price
+    analysis.moneyness_unknown = spot <= 0
     near = thresholds.itm_near_the_money_pct
 
     for c in snapshot.contracts:
-        # ステップ2: ITM かつ ATM付近の注目価格帯を記録
+        # 期限切れの約定は除外(レポート日より前の限月)
+        if as_of is not None:
+            exp = _parse_iso_date(c.expiry)
+            if exp is not None and exp < as_of:
+                analysis.expired_skipped += 1
+                continue
+
+        # ステップ2: ITM かつ ATM付近の注目価格帯を記録(spot 不明時はスキップ)
         moneyness = (c.strike - spot) / spot if spot else 0.0
-        if c.in_the_money and abs(moneyness) <= near:
+        if spot > 0 and c.in_the_money and abs(moneyness) <= near:
             if c.option_type == "call":
                 analysis.itm_call_strikes.append(c.strike)
             else:
@@ -174,6 +212,7 @@ def analyze_ticker(
                 side=c.side,
                 direction=direction,
                 directional_premium_usd=round(dir_premium, 0),
+                premium_is_notional=c.premium_is_notional,
             )
         )
 
@@ -190,8 +229,9 @@ def analyze_ticker(
     else:
         analysis.classification = "中立"
 
-    # 注目取引はプレミアムの大きい順に
+    # 注目取引は金額の大きい順に
     analysis.notable_trades.sort(key=lambda t: t.premium_usd, reverse=True)
+    analysis.premium_basis_notional = any(t.premium_is_notional for t in analysis.notable_trades)
     analysis.itm_call_strikes = sorted(set(analysis.itm_call_strikes))
     analysis.itm_put_strikes = sorted(set(analysis.itm_put_strikes))
     return analysis
@@ -203,12 +243,16 @@ def analyze(
     provider_name: str,
     flow_based: bool,
     generated_at: str,
+    as_of: Optional[date] = None,
 ) -> DailyAnalysis:
     daily = DailyAnalysis(
         generated_at=generated_at,
         provider=provider_name,
         flow_based=flow_based,
     )
+    # as_of 未指定なら generated_at の先頭(YYYY-MM-DD)から推定
+    if as_of is None:
+        as_of = _parse_iso_date(generated_at.split(" ")[0]) if generated_at else None
     for snap in snapshots:
-        daily.tickers.append(analyze_ticker(snap, thresholds, flow_based))
+        daily.tickers.append(analyze_ticker(snap, thresholds, flow_based, as_of=as_of))
     return daily
