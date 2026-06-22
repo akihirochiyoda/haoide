@@ -8,6 +8,85 @@ InfoLib のオプションフローを毎日取得し、`optionflow` ツール�
 - ブランチ: `claude/daily-image-flow-automation-6jfswq`
 - 分析ツール: `optionflow`（このリポジトリ内）
 
+> **これ1枚で運用する場合は下の「⓪ 完成版（毎回これを貼る）」を使ってください。**
+> 個別ステップを使い分けたい場合は ①〜⑤ を参照。
+
+---
+
+## ⓪ 完成版プロンプト（毎回これを貼る・全部入り）
+
+データ取得 → 分析 → 検算 → コミット → Google ドライブへ断面保存 までを1本で行います。
+
+```text
+あなたはローカルで作業でき、ブラウザと Google ドライブを操作できるアシスタントです。
+本日の米国株オプションフローを取得・分析し、結果を Google ドライブに保存します。
+リポジトリ akihirochiyoda/haoide の haoide ディレクトリで作業してください。
+
+# 1. 最新コードに更新（分析ロジックは修正済み。必ず pull する）
+git checkout claude/daily-image-flow-automation-6jfswq && git pull
+pip install -r optionflow/requirements.txt   # 初回のみでよい
+
+# 2. データ取得（ブラウザ）
+https://infolib.org/market-dashboard/unusual-options-flow を開き、本日の
+Unusual Options Flow から金額の大きい順に最大50件を読み取り、次のスキーマの
+JSON 配列として data/infolib_flow.json に保存する。
+
+各約定 = 配列の1要素:
+{
+  "ticker": "銘柄", "type": "call"/"put", "strike": 数値, "expiry": "YYYY-MM-DD",
+  "spot": 原資産価格(数値), "size": 出来高(数値), "open_interest": 建玉(数値),
+  "price": オプション1株単価(数値), "premium": プレミアム$(数値・任意),
+  "iv": 小数, "side": "ask"/"bid", "sentiment": "bullish"/"bearish"
+}
+
+取得ルール（前回の不具合を防ぐため厳守）:
+- 【最重要】"price"(1株単価) を必ず入れる。"premium" 欄に行使額(strike×size×100)を入れない。
+  price が無いと金額が実プレミアムにならず想定元本で代用され、桁が大きくずれる。
+- 【必須】"spot"(原資産価格) を必ず入れる。0/空にしない（無いとITM/OTM判定が無効）。
+- "expiry" は本日以降の限月のみ（過去日は含めない）。
+- "side" は各約定ごとに ask/bid を正確に（スプレッド方向の補正に使う）。取れなければ sentiment。
+- 数値は $・カンマ・単位を除く（"$2.5M"→2500000、"$5.10"→5.10、"55%"→0.55）。
+- 画面読み取りで抽出してよい。保存後に件数を報告。
+
+# 3. 分析（実行ログの "run_id=..." を控える。出力はタイムスタンプ命名で reports/ に出る）
+python -m optionflow.run --provider infolib --no-claude
+
+# 4. 検算（reports/latest.md を開き、直っているか確認して報告）
+(a) ヘッダに「想定元本で代用」警告が出ていない（price が効いている）
+(b) 各銘柄の「原資産価格」が $0.00 でない
+(c) 「期限切れ除外」件数が妥当
+(d) スプレッド銘柄に「⇄ 縦スプレッド検出」注記が出て方向が妥当
+※ (a) の警告が出る/原資産が $0.00 なら、price と spot を取り直して data/infolib_flow.json を
+   作り直し、再実行する。
+
+# 5. 総括コメント（あなた自身が作成）
+reports/latest.md の「まとめ」表を要約し、総括コメント（注目銘柄と理由、実フロー判定である点、
+規模が大きい＝確度が高いではない点、投資助言ではない旨）を作成して提示。
+
+# 6. Git にコミット＆プッシュ
+git add reports/ data/infolib_flow.json
+git commit -m "infolib flow report (run_id) $(date -u +%Y-%m-%dT%H%M%SZ)"
+git push
+
+# 7. Google ドライブへ断面を保存（1実行=1断面）
+- 専用フォルダ "OptionFlow Reports - ツンデレ姫オプション分析" を検索し、無ければ作成
+  （mimeType=application/vnd.google-apps.folder）。フォルダIDを控える。
+- 今回の run_id に対応する reports/ の4ファイルを、そのフォルダ配下にアップロード:
+    optionflow_<run_id>.md          → contentMimeType=text/plain （Google ドキュメントに変換）
+                                       タイトル "OptionFlow <run_id> レポート"
+    optionflow_<run_id>.summary.csv → contentMimeType=text/csv  （スプレッドシートに変換）
+                                       タイトル "OptionFlow <run_id> まとめ"
+    optionflow_<run_id>.trades.csv  → contentMimeType=text/csv  （スプレッドシートに変換）
+                                       タイトル "OptionFlow <run_id> 明細"
+    optionflow_<run_id>.json        → contentMimeType=application/json （変換しない）
+                                       タイトル "OptionFlow <run_id> data.json"
+  いずれも parentId に専用フォルダID。同じ run_id を二重アップロードしない。
+
+# 8. 報告
+検算(a)〜(d)の結果、まとめ表、総括コメント、そして Google ドライブの保存リンク
+（フォルダ＋各ファイルのURL）をこの画面に表示する。
+```
+
 ---
 
 ## ① 初回セットアップ用プロンプト（最初の1回だけ）
