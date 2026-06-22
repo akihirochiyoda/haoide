@@ -1,0 +1,23 @@
+{
+  "watchlist": [
+    "NVDA", "AMD", "AVGO", "MSFT", "AAPL",
+    "GOOGL", "AMZN", "META", "TSLA", "SMCI",
+    "PLTR", "SPY", "QQQ"
+  ],
+  "provider": "auto",
+  "expiries_to_scan": 3,
+  "thresholds": {
+    "min_volume": 500,
+    "min_premium_usd": 250000,
+    "vol_oi_ratio": 1.0,
+    "itm_near_the_money_pct": 0.10,
+    "sentiment_strong_usd": 2000000,
+    "new_positioning_weight": 1.5
+  },
+  "claude": {
+    "enabled": true,
+    "model": "claude-opus-4-8",
+    "persona": "tsundere",
+    "language": "ja"
+  }
+}

@@ -1,0 +1,6 @@
+# データ取得(無料 / 既定)
+yfinance>=0.2.40
+# 有料フローAPI(Unusual Whales)/ Slack 通知に使用
+requests>=2.31.0
+# クロード監修(任意。ANTHROPIC_API_KEY 設定時のみ使用)
+anthropic>=0.40.0

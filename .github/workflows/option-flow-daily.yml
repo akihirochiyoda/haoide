@@ -1,0 +1,62 @@
+name: ツンデレ姫のオプション分析(日次)
+
+# 米国市場の引け後に実行(夏時間EDTの16:00ET = 20:00UTC を見て 22:00UTC)。
+# 平日のみ。手動実行(workflow_dispatch)も可能。
+on:
+  schedule:
+    - cron: "0 22 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "監視銘柄をカンマ区切りで上書き(任意)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: option-flow-daily
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 依存関係のインストール
+        run: pip install -r optionflow/requirements.txt
+
+      - name: 分析の実行
+        env:
+          # 任意。未設定でもテンプレート要約にフォールバックして動作する。
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 任意。設定すると本物の約定フローに自動切替。
+          UNUSUAL_WHALES_API_KEY: ${{ secrets.UNUSUAL_WHALES_API_KEY }}
+          # 任意。設定すると Slack に通知。
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.tickers }}" ]; then
+            ARGS="--tickers ${{ github.event.inputs.tickers }}"
+          fi
+          python -m optionflow.run --output-dir reports $ARGS
+
+      - name: レポートをコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add reports/
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "option flow report $(date -u +%Y-%m-%d)"
+            git push
+          fi
