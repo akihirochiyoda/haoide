@@ -1,6 +1,9 @@
-"""分析結果を Markdown レポートに整形する。"""
+"""分析結果を Markdown レポート / CSV に整形する。"""
 
 from __future__ import annotations
+
+import csv
+import io
 
 from .analyzer import DailyAnalysis, TickerAnalysis
 
@@ -157,3 +160,48 @@ def build_markdown(daily: DailyAnalysis, claude_review: str | None = None) -> st
     out.append(disclaimer)
     out.append("")
     return "\n".join(out)
+
+
+def build_summary_csv(daily: DailyAnalysis) -> str:
+    """まとめ(順位)をスプレッドシート用 CSV にする。"""
+    amount = _amount_label(daily.premium_basis_notional)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["生成日時", daily.generated_at, "データ元", daily.provider,
+                "金額基準", amount])
+    w.writerow([])
+    w.writerow(["順位", "銘柄", "判定", f"規模({amount})USD",
+                "方向性スコアUSD", "put/call", "スプレッド検出"])
+    for i, t in enumerate(daily.ranked(), 1):
+        w.writerow([
+            i, t.ticker, t.classification, round(t.conviction_usd),
+            round(t.bullish_score_usd), t.put_call_ratio,
+            "あり" if t.has_spread else "",
+        ])
+    return buf.getvalue()
+
+
+def build_trades_csv(daily: DailyAnalysis) -> str:
+    """全銘柄の大口取引明細をスプレッドシート用 CSV にする。"""
+    amount = _amount_label(daily.premium_basis_notional)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["銘柄", "判定", "原資産価格", "限月", "種別", "売買",
+                "行使価格", "出来高", "建玉", "V/OI", f"{amount}USD",
+                "IV", "方向", "新規", "スプレッド"])
+    for t in daily.ranked() + [x for x in daily.tickers if x.classification == "中立"]:
+        spot = "" if t.moneyness_unknown else round(t.underlying_price, 2)
+        for tr in t.notable_trades:
+            w.writerow([
+                t.ticker, t.classification, spot, tr.expiry,
+                tr.option_type.upper(),
+                {"buy": "買", "sell": "売"}.get(tr.side or "", ""),
+                tr.strike, tr.volume, tr.open_interest,
+                "" if tr.open_interest == 0 else tr.vol_oi_ratio,
+                round(tr.premium_usd),
+                "" if tr.implied_volatility <= 0 else tr.implied_volatility,
+                "強気" if tr.direction == "bullish" else "弱気",
+                "新規" if tr.new_positioning else "",
+                "⇄" if tr.part_of_spread else "",
+            ])
+    return buf.getvalue()

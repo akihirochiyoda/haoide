@@ -46,7 +46,8 @@ def main(argv=None) -> int:
 
     now = datetime.now(timezone.utc)
     generated_at = now.strftime("%Y-%m-%d %H:%M UTC")
-    date_str = now.strftime("%Y-%m-%d")
+    # 実行ごとにそのタイミングで命名(UTC秒まで)。例: 2026-06-22_120530Z
+    run_id = now.strftime("%Y-%m-%d_%H%M%SZ")
 
     # 1) データ取得
     provider = get_provider(cfg.provider)
@@ -80,10 +81,12 @@ def main(argv=None) -> int:
     print("クロード監修コメントを生成中...", file=sys.stderr)
     review = generate_review(daily, cfg.claude)
 
-    # 6) レポート生成・保存
+    # 6) レポート生成・保存(実行ごとにタイムスタンプ命名)
     markdown = build_markdown(daily, claude_review=review)
-    paths = save_reports(daily, markdown, args.output_dir, date_str)
-    print(f"レポート保存: {paths['markdown']}", file=sys.stderr)
+    paths = save_reports(daily, markdown, args.output_dir, run_id)
+    print(f"レポート保存 (run_id={run_id}):", file=sys.stderr)
+    for key in ("markdown", "summary_csv", "trades_csv", "json"):
+        print(f"  {key}: {paths[key]}", file=sys.stderr)
 
     # 任意: Slack 通知
     if cfg.slack_webhook_url:
