@@ -110,8 +110,40 @@ def main() -> int:
     assert "NVDA" in md
     print("[OK] フォールバック監修とレポート生成が動作")
 
+    _test_infolib_provider(th)
+
     print("\nすべてのテストに合格しました。")
     return 0
+
+
+def _test_infolib_provider(th):
+    """InfoLib プロバイダ: sample ファイルを読み、方向判定が正しいか。"""
+    from pathlib import Path
+
+    from ..providers.infolib_provider import InfoLibProvider
+
+    sample = Path(__file__).resolve().parents[2] / "data" / "infolib_flow.sample.json"
+    if not sample.exists():
+        print("[SKIP] InfoLib sample ファイルが無いためスキップ")
+        return
+
+    provider = InfoLibProvider(flow_file=sample)
+    tickers = provider.available_tickers()
+    assert tickers and "NVDA" in tickers and "AMD" in tickers, tickers
+
+    snaps = provider.fetch_many(tickers)
+    daily = analyze(
+        snaps, thresholds=th, provider_name="infolib",
+        flow_based=provider.provides_flow_side, generated_at="2026-06-22 00:00 UTC",
+    )
+    bt = {t.ticker: t for t in daily.tickers}
+    # NVDA: call+bullish → 強気
+    assert bt["NVDA"].classification == "上昇期待", bt["NVDA"].classification
+    # AMD: put+bearish → 弱気
+    assert bt["AMD"].classification == "下落期待", bt["AMD"].classification
+    # TSLA: put + sentiment=bullish(=PUT売り) → 強気
+    assert bt["TSLA"].classification == "上昇期待", bt["TSLA"].classification
+    print("[OK] InfoLib: side/sentiment からの方向判定が正しい(PUT売り→強気 含む)")
 
 
 if __name__ == "__main__":

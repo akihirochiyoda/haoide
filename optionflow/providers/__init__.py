@@ -32,6 +32,10 @@ def get_provider(name: str = "auto"):
         from .unusual_whales_provider import UnusualWhalesProvider
 
         return UnusualWhalesProvider()
+    if name == "infolib":
+        from .infolib_provider import InfoLibProvider
+
+        return InfoLibProvider()
 
     raise ValueError(f"unknown provider: {name}")
 

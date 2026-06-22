@@ -38,14 +38,11 @@ def main(argv=None) -> int:
 
     if args.provider:
         cfg.provider = args.provider
+    explicit_tickers = bool(args.tickers)
     if args.tickers:
         cfg.watchlist = [s.strip().upper() for s in args.tickers.split(",") if s.strip()]
     if args.no_claude:
         cfg.claude.enabled = False
-
-    if not cfg.watchlist:
-        print("監視銘柄が空です。config.json か --tickers を確認してください。", file=sys.stderr)
-        return 2
 
     now = datetime.now(timezone.utc)
     generated_at = now.strftime("%Y-%m-%d %H:%M UTC")
@@ -53,8 +50,21 @@ def main(argv=None) -> int:
 
     # 1) データ取得
     provider = get_provider(cfg.provider)
-    print(f"[{provider.name}] {len(cfg.watchlist)} 銘柄を取得中...", file=sys.stderr)
-    snapshots = provider.fetch_many(cfg.watchlist, expiries_to_scan=cfg.expiries_to_scan)
+
+    # データ側が銘柄一覧を持ち(InfoLib 等)、--tickers 未指定なら、
+    # ファイルに出現した全銘柄(=大口が出た銘柄)を分析対象にする。
+    tickers = cfg.watchlist
+    if not explicit_tickers:
+        available = provider.available_tickers()
+        if available:
+            tickers = available
+
+    if not tickers:
+        print("分析対象の銘柄がありません。config.json / --tickers / データファイルを確認してください。", file=sys.stderr)
+        return 2
+
+    print(f"[{provider.name}] {len(tickers)} 銘柄を取得中...", file=sys.stderr)
+    snapshots = provider.fetch_many(tickers, expiries_to_scan=cfg.expiries_to_scan)
 
     # 2)-5) 分析(画像フローの中核)
     daily = analyze(

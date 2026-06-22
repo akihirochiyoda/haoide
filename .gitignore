@@ -32,3 +32,6 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# optionflow: ライブ取得データ(サンプルは残す)
+data/infolib_flow.json

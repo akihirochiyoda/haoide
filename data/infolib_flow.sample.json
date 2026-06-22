@@ -1,0 +1,56 @@
+[
+  {
+    "ticker": "NVDA",
+    "type": "call",
+    "strike": 132.0,
+    "expiry": "2026-07-17",
+    "spot": 130.5,
+    "size": 5000,
+    "open_interest": 1200,
+    "price": 5.1,
+    "premium": 2550000,
+    "iv": 0.55,
+    "side": "ask",
+    "sentiment": "bullish"
+  },
+  {
+    "ticker": "NVDA",
+    "type": "call",
+    "strike": 128.0,
+    "expiry": "2026-07-17",
+    "spot": 130.5,
+    "size": 3000,
+    "open_interest": 500,
+    "price": 6.0,
+    "iv": 0.52,
+    "sentiment": "bullish"
+  },
+  {
+    "ticker": "AMD",
+    "type": "put",
+    "strike": 49.0,
+    "expiry": "2026-07-17",
+    "spot": 50.0,
+    "size": 8000,
+    "open_interest": 1000,
+    "price": 3.0,
+    "premium": 2400000,
+    "iv": 0.6,
+    "side": "ask",
+    "sentiment": "bearish"
+  },
+  {
+    "ticker": "TSLA",
+    "type": "put",
+    "strike": 240.0,
+    "expiry": "2026-08-21",
+    "spot": 245.0,
+    "size": 4000,
+    "open_interest": 6000,
+    "price": 7.5,
+    "premium": 3000000,
+    "iv": 0.62,
+    "side": "bid",
+    "sentiment": "bullish"
+  }
+]

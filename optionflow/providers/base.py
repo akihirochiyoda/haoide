@@ -60,6 +60,13 @@ class OptionsProvider:
     def fetch(self, ticker: str, expiries_to_scan: int = 3) -> TickerSnapshot:
         raise NotImplementedError
 
+    def available_tickers(self) -> Optional[list[str]]:
+        """データ側が銘柄一覧を持つ場合に返す(例: InfoLib のフローファイル)。
+
+        None の場合は呼び出し側の watchlist を使う。
+        """
+        return None
+
     def fetch_many(
         self, tickers: Iterable[str], expiries_to_scan: int = 3
     ) -> list[TickerSnapshot]:

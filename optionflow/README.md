@@ -39,9 +39,16 @@ optionflow/
 └── run.py                 # 日次実行エントリポイント
 ```
 
-データ取得元は **プラガブル**です。既定は無料の `yfinance`（キー不要で即動作）。
-環境変数 `UNUSUAL_WHALES_API_KEY` を設定すると、本物の約定フロー（買い/売りの別あり）に
-自動で切り替わります。
+データ取得元は **プラガブル**です。
+
+| プロバイダ | 種別 | 方向判定 | 備考 |
+|---|---|---|---|
+| `yfinance` | 無料・既定 | チェーン推定 | キー不要で即動作 |
+| `unusual_whales` | 有料・公式API | 本物のフロー | `UNUSUAL_WHALES_API_KEY` で自動切替 |
+| `infolib` | 無料・ブラウザ取得 | 本物のフロー | InfoLib を Claude コワークが読み取り（[INFOLIB_COWORK.md](INFOLIB_COWORK.md)） |
+
+`auto` は `UNUSUAL_WHALES_API_KEY` があれば Unusual Whales、無ければ yfinance を選びます。
+InfoLib を使う場合は `--provider infolib` を明示します。
 
 ---
 
