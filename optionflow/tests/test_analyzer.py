@@ -102,6 +102,26 @@ def main() -> int:
     assert msft.notable_trades[0].direction == "bullish"
     print("[OK] 本物フロー: PUT売り→強気 判定が正しい")
 
+    # 縦スプレッド: プット買い(高ストライク)+プット売り(低ストライク)=ベアプット
+    # → 売りレッグで符号反転せず「下落期待」になること
+    spread_snap = TickerSnapshot(
+        ticker="IWM",
+        underlying_price=290.0,
+        contracts=[
+            _contract("IWM", "put", 281, 290.0, volume=6500, oi=393, price=28.0, side="buy"),
+            _contract("IWM", "put", 279, 290.0, volume=6500, oi=543, price=27.0, side="sell"),
+        ],
+    )
+    spread_daily = analyze(
+        [spread_snap], thresholds=th, provider_name="synthetic_flow",
+        flow_based=True, generated_at="2026-06-22 00:00 UTC",
+    )
+    iwm = spread_daily.tickers[0]
+    assert iwm.has_spread, "縦スプレッドが検出されていない"
+    assert iwm.classification == "下落期待", iwm.classification
+    assert all(tr.direction == "bearish" for tr in iwm.notable_trades), "脚の方向が構造に揃っていない"
+    print("[OK] 縦スプレッド: ベアプットを下落期待と判定(符号反転しない)")
+
     # クロード監修(キー無し → フォールバック)とレポート生成が例外なく動く
     review = generate_review(daily, ClaudeConfig(enabled=True, api_key=None))
     assert "投資助言ではありません" in review

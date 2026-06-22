@@ -50,6 +50,11 @@ def _ticker_section(t: TickerAnalysis, flow_based: bool) -> str:
     ]
     if t.expired_skipped:
         lines.insert(2, f"- ⚠️ 期限切れの約定 {t.expired_skipped} 件を除外しました")
+    if t.has_spread:
+        lines.insert(
+            2,
+            "- ⇄ 縦スプレッド(買い+売り)を検出。方向は買い建てレッグ基準に補正しています",
+        )
 
     if t.notable_trades:
         lines.append("大口取引(上位):")
@@ -62,6 +67,8 @@ def _ticker_section(t: TickerAnalysis, flow_based: bool) -> str:
             otype = tr.option_type.upper()
             if flow_based and tr.side:
                 otype += f"({'買' if tr.side == 'buy' else '売'})"
+            if tr.part_of_spread:
+                otype += "⇄"
             new_pos = "🆕" if tr.new_positioning else ""
             dir_mark = "🟢強気" if tr.direction == "bullish" else "🔴弱気"
             voi = "—(OI0)" if tr.open_interest == 0 else f"{tr.vol_oi_ratio}"

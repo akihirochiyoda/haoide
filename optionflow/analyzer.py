@@ -49,6 +49,8 @@ class NotableTrade:
     directional_premium_usd: float
     # premium_usd が実プレミアムでなく行使額(notional)か
     premium_is_notional: bool = False
+    # 縦スプレッド(買い+売り)の一部と推定されるか
+    part_of_spread: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -75,6 +77,8 @@ class TickerAnalysis:
     moneyness_unknown: bool = False
     # 期限切れのため除外した約定数
     expired_skipped: int = 0
+    # 縦スプレッド構造を検出したか(方向ラベルを構造ベースに補正)
+    has_spread: bool = False
     error: Optional[str] = None
 
     def to_dict(self) -> dict:
@@ -141,6 +145,47 @@ def _direction_of(contract: OptionContract, flow_based: bool) -> tuple[str, floa
     return "bearish", -premium
 
 
+def _detect_vertical_spreads(big: list[dict], flow_based: bool):
+    """縦スプレッド(同一種別・同一限月で「買い」と「売り」が異なる行使価格に混在)を検出。
+
+    返り値:
+      group_of:      big のindex -> グループキー
+      group_dir:     グループキー -> 構造の方向("bullish"/"bearish")
+      group_members: グループキー -> index リスト
+
+    縦スプレッドの方向は「買い建て」レッグで決まる(例: プット買い+プット売り=
+    ベア・プット・スプレッド=弱気)。これにより、売りレッグを独立した逆方向
+    シグナルとして数えてネットの符号が反転する誤判定を防ぐ。side が無い
+    (チェーン推定)場合は検出しない。
+    """
+    from collections import defaultdict
+
+    if not flow_based:
+        return {}, {}, {}
+
+    buckets: dict[tuple, list[int]] = defaultdict(list)
+    for i, item in enumerate(big):
+        c = item["contract"]
+        if c.side in ("buy", "sell"):
+            buckets[(c.option_type, c.expiry)].append(i)
+
+    group_of: dict[int, tuple] = {}
+    group_dir: dict[tuple, str] = {}
+    group_members: dict[tuple, list[int]] = {}
+    for key, idxs in buckets.items():
+        sides = {big[i]["contract"].side for i in idxs}
+        strikes = {big[i]["contract"].strike for i in idxs}
+        if "buy" in sides and "sell" in sides and len(strikes) > 1:
+            buy_idxs = [i for i in idxs if big[i]["contract"].side == "buy"]
+            rep = max(buy_idxs, key=lambda i: big[i]["contract"].estimated_premium_usd)
+            otype = big[rep]["contract"].option_type
+            group_dir[key] = "bullish" if otype == "call" else "bearish"
+            group_members[key] = idxs
+            for i in idxs:
+                group_of[i] = key
+    return group_of, group_dir, group_members
+
+
 def analyze_ticker(
     snapshot: TickerSnapshot,
     thresholds: Thresholds,
@@ -159,6 +204,8 @@ def analyze_ticker(
     analysis.moneyness_unknown = spot <= 0
     near = thresholds.itm_near_the_money_pct
 
+    # --- パス1: 集計と「大口取引」の収集 ---
+    big: list[dict] = []
     for c in snapshot.contracts:
         # 期限切れの約定は除外(レポート日より前の限月)
         if as_of is not None:
@@ -186,15 +233,50 @@ def analyze_ticker(
             c.volume >= thresholds.min_volume
             and c.estimated_premium_usd >= thresholds.min_premium_usd
         )
-        new_positioning = c.vol_oi_ratio >= thresholds.vol_oi_ratio
         if not is_big:
             continue
+        big.append(
+            {
+                "contract": c,
+                "moneyness": moneyness,
+                "new_positioning": c.vol_oi_ratio >= thresholds.vol_oi_ratio,
+            }
+        )
 
-        direction, dir_premium = _direction_of(c, flow_based)
-        # 新規ポジションは方向性への寄与を重み付け
+    # --- 縦スプレッド検出(売りレッグでの符号反転を防ぐ) ---
+    group_of, group_dir, group_members = _detect_vertical_spreads(big, flow_based)
+    analysis.has_spread = bool(group_of)
+    counted_groups: set = set()
+
+    # --- パス2: 方向性スコアと注目取引の構築 ---
+    for i, item in enumerate(big):
+        c = item["contract"]
+        moneyness = item["moneyness"]
+        new_positioning = item["new_positioning"]
         weight = thresholds.new_positioning_weight if new_positioning else 1.0
-        dir_premium *= weight
-        analysis.bullish_score_usd += dir_premium
+
+        if i in group_of:
+            # スプレッドの一部: 方向は構造(買い建てレッグ)に合わせ、
+            # スコアへの寄与はグループで1回だけ(最大レッグの規模)に集約。
+            key = group_of[i]
+            direction = group_dir[key]
+            part_of_spread = True
+            if key not in counted_groups:
+                counted_groups.add(key)
+                mag = max(
+                    big[j]["contract"].estimated_premium_usd for j in group_members[key]
+                )
+                signed = mag if direction == "bullish" else -mag
+                contribution = signed * weight
+                analysis.bullish_score_usd += contribution
+                dir_premium = contribution
+            else:
+                dir_premium = 0.0
+        else:
+            direction, dir_premium = _direction_of(c, flow_based)
+            dir_premium *= weight
+            analysis.bullish_score_usd += dir_premium
+            part_of_spread = False
 
         analysis.notable_trades.append(
             NotableTrade(
@@ -213,6 +295,7 @@ def analyze_ticker(
                 direction=direction,
                 directional_premium_usd=round(dir_premium, 0),
                 premium_is_notional=c.premium_is_notional,
+                part_of_spread=part_of_spread,
             )
         )
 
